@@ -1,28 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO.Compression;
-using System.Resources;
-using System.Reflection;
 
 namespace WindowsFormsApp1
 {
     public partial class Form1 : Form
-    {
-        private string updateFolder = "";
+    {        
         ProgressDialogBox pdb1;
 
         private int SamplesPerSpoiler { get; set; } = 1;
         public List<string> SetFolders { get; set; } = new List<string>();
         public List<string> SetArchives { get; set; } = new List<string>();
+
+        public List<Spoiler> Spoilers { get; set; } = new List<Spoiler>();
 
         public Form1()
         {            
@@ -49,26 +45,24 @@ namespace WindowsFormsApp1
             {
                 string[] fileList = (string[])e.Data.GetData(DataFormats.FileDrop);
                 Array.Sort(fileList, new NaturalStringComparer());
-                string studioPattern = @"\[.*?\]";
-                string datePattern = @"\d{4}-\d{2}-\d{2}";
-
-                Spoiler spoiler = new Spoiler();
-
-                foreach(string file in fileList)
+                
+                if(tbImagesPerSpoiler.Text == null)
                 {
-                    Regex rgxStudio = new Regex(studioPattern);
-                    Regex rgxDate = new Regex(datePattern);
-
-                    Match matchStudio = rgxStudio.Match(file.Substring(0));
-                    Match matchDate = rgxDate.Match(file);
-
-                    spoiler.SetName = matchStudio.Value;
-                    spoiler.Date = matchDate.Value;
-                    Console.WriteLine(spoiler.SetName + " " + spoiler.Date);
+                    foreach (string file in fileList)
+                    {
+                        Spoiler spoiler = new Spoiler(file, SamplesPerSpoiler);
+                        Spoilers.Add(spoiler);
+                    }
+                }
+                else
+                {
+                    foreach (string file in fileList)
+                    {
+                        Spoiler spoiler = new Spoiler(file, Int32.Parse(tbImagesPerSpoiler.Text));
+                        Spoilers.Add(spoiler);
+                    }
                 }
 
-                
-                
                 if (dataGridView1.Rows.Count < fileList.Length)
                 {
                     dataGridView1.Rows.Add(fileList.Length - dataGridView1.Rows.Count);                    
@@ -94,6 +88,25 @@ namespace WindowsFormsApp1
             {                
                 links.Add(m.Value);
             }
+
+            int matchNumber = 0;
+
+            foreach(Spoiler spoiler in Spoilers)
+            {
+                for(int i=0; i < spoiler.Links.Length; i++)
+                {
+                    try
+                    {
+                        spoiler.Links[i] = rgx.Matches(input)[matchNumber].Value;
+                    }
+                    catch (System.ArgumentOutOfRangeException)
+                    {
+                        spoiler.Links[i] = null;
+                    }
+
+                    matchNumber++;
+                }
+            }
                         
             if (dataGridView1.Rows.Count < links.Count)
             {
@@ -109,68 +122,32 @@ namespace WindowsFormsApp1
 
         private void btnApplyPattern_Click(object sender, EventArgs e)
         {
-            string column1 = "";
-            string column2 = "";
             string output = "";
-            int i;
-            int j=0;
-
+            
             if (dataGridView1.Columns[1] != null)
-            {
-                for (i = 0; i < dataGridView1.RowCount; i++)
-                {
-                    if((string)dataGridView1.Rows[i].Cells[0].Value != null)
-                    {
-                        column1 += dataGridView1.Rows[i].Cells[0].Value + "|";
-                    }
-
-                    if ((string)dataGridView1.Rows[i].Cells[1].Value != null)
-                    {
-                        column2 += dataGridView1.Rows[i].Cells[1].Value + "|";
-                    }
-                }
-
-                string[] setNames = column1.Split('|');   
-                string[] links = column2.Split('|');
-
-                for (i = 0; i < setNames.Length - 1; i++)
+            {                                                
+                foreach (Spoiler spoiler in Spoilers)
                 {
                     string pattern = tbPattern.Text;
-                    int k = 0;
+                    pattern = pattern.Replace(@"[name]", spoiler.SpoilerTitle);
 
-                    if(links[0] == "")
-                    {
-                        MessageBox.Show(Properties.Resources.MsgNoLinks);
-                        break;
-                    }
-                    else if (j < links.Length)
-                    {
-                        pattern = pattern.Replace(@"[name]", setNames[i]);
-                        while (pattern.Contains($"[link{k}]"))
+                    for (int i = 0; i < spoiler.Links.Length; i++)
+                    {                        
+                        try
                         {
-                            try
-                            {
-                                pattern = pattern.Replace($"[link{k}]", links[j]);
-                            }
-                            catch(System.IndexOutOfRangeException)
-                            {
-                                pattern = pattern.Replace($"[link{k}]", "");
-                            }
-                            
-                            k++;
-                            j++;
+                            pattern = pattern.Replace($"[link{i}]", spoiler.Links[i]);
+                        }
+                        catch(System.IndexOutOfRangeException)
+                        {
+                            pattern = pattern.Replace($"[link{i}]", "");
                         }
                         
-                        output += pattern;
                     }
-                    else
-                    {
-                        break;
-                    } 
-                }
-            }
 
-            Console.WriteLine("Значение из метода - " + j.ToString());
+                    output += pattern;
+                }
+                
+            }
 
             tbOutput.Text = output;
         }
@@ -212,6 +189,8 @@ namespace WindowsFormsApp1
 
         private void btnChooseSource_Click(object sender, EventArgs e)
         {
+            string updateFolder;
+
             if(openFileDialog1.ShowDialog() == DialogResult.OK)
             {                
                 SetFolders.Clear();
@@ -442,12 +421,5 @@ namespace WindowsFormsApp1
             return images;
         }
 
-        private void checkBox1_CheckedChanged(object sender, EventArgs e)
-        {
-            if(checkBox1.Checked == true)
-            {
-
-            }
-        }
     }
 }
